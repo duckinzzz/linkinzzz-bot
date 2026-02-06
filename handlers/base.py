@@ -1,0 +1,24 @@
+from aiogram import Router
+from aiogram.filters import CommandStart
+from aiogram.types import Message
+
+from utils.logging_utils import log_event
+
+base_router = Router()
+
+
+@base_router.message(CommandStart())
+async def cmd_start(message: Message):
+    user = message.from_user
+    username = f"@{user.username}" if user.username else f"{user.first_name or user.id}"
+    uid = message.from_user.id
+
+    welcome_text = (
+        f"🔗 *Linkinzzz* – бот для скачивания контента.\n"
+        f"Просто отправьте ссылку!\n\n"
+        f"Использует `yt-dlp`\n"
+        # f"Список поддерживаемых сайтов: link\n\n"
+    )
+
+    await message.answer(welcome_text, parse_mode="Markdown")
+    log_event(event='bot_start', username=username, user_id=uid, chat_id=message.chat.id)

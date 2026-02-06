@@ -1,0 +1,18 @@
+services:
+  bot:
+#    image: ghcr.io/duckinzzz/nerdinzzz-bot:latest
+    build: .
+    container_name: linkinzzz
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "1"
+#    mem_limit: 300m
+#    mem_reservation: 100m
+#    cpus: 0.20
