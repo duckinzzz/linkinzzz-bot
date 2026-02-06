@@ -80,7 +80,7 @@ class VideoDownloader:
 
         for fmt in formats:
             info = self.parse_format(fmt)
-            if info and info.has_audio and info.has_video:
+            if info:
                 candidates.append(info)
 
         candidates.sort(key=lambda f: (f.is_hls, -f.height))
