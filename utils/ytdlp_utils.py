@@ -80,7 +80,7 @@ class VideoDownloader:
 
         for fmt in formats:
             info = self.parse_format(fmt)
-            if info:
+            if info and info.has_audio and info.has_video:
                 candidates.append(info)
 
         candidates.sort(key=lambda f: (f.is_hls, -f.height))
@@ -217,18 +217,10 @@ class VideoDownloader:
         return 0
 
     async def download_generic(self, formats: list[FormatInfo]) -> bytes | int:
-        non_hls = [f for f in formats if not f.is_hls][:2]
-        for format_info in non_hls:
+        for format_info in formats:
             result = await self.try_format(format_info)
             if result:
                 return result
-
-        if len(non_hls) < 2:
-            hls = [f for f in formats if f.is_hls][:2 - len(non_hls)]
-            for format_info in hls:
-                result = await self.try_format(format_info)
-                if result:
-                    return result
 
         return 0
 
