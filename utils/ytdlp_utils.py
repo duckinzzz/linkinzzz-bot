@@ -139,8 +139,8 @@ async def download_video_bytes(
     with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmpdir:
         clear_tmpdir(tmpdir)
         file = await download_video(url, tmpdir)
-
-        vs = get_metadata(str(file)).get('video_stream')
+        metadata = get_metadata(str(file))
+        vs = metadata.get('video_stream') if metadata else None
         codec = vs.get('codec') if vs else None
         w = vs.get("width") if vs else None
         h = vs.get("height") if vs else None
