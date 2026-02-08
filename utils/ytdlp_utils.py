@@ -1,8 +1,11 @@
 import asyncio
+import json
 import os
+import subprocess
 import tempfile
-from dataclasses import dataclass
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Callable, Awaitable
+
 from yt_dlp import YoutubeDL
 
 MAX_SIZE_MB = 50
@@ -11,246 +14,146 @@ BASE_YDL_OPTS = {
     "enable_file_urls": True,
     "remote_components": ["ejs:github"],
 }
+CODECS_TO_REFORMAT = ['vp9']
 
 
-@dataclass
-class FormatInfo:
-    format_id: str
-    height: int
-    filesize: Optional[int]
-    acodec: str
-    vcodec: str
-    ext: str
-    protocol: str
-
-    @property
-    def filesize_mb(self) -> Optional[float]:
-        return self.filesize / 1024 / 1024 if self.filesize else None
-
-    @property
-    def has_audio(self) -> bool:
-        return self.acodec not in ("none", None, "")
-
-    @property
-    def has_video(self) -> bool:
-        return self.vcodec not in ("none", None, "")
-
-    @property
-    def is_hls(self) -> bool:
-        return self.protocol in ("m3u8", "m3u8_native") or "hls" in self.protocol.lower()
-
-
-class VideoDownloader:
-    def __init__(self, url: str, max_size_mb: int = MAX_SIZE_MB):
-        self.url = url
-        self.max_size_mb = max_size_mb
-        self.tmpdir: Optional[str] = None
-
-    def parse_format(self, fmt: dict) -> Optional[FormatInfo]:
-        height = fmt.get("height")
-        if not height:
-            return None
-
-        return FormatInfo(
-            format_id=fmt.get("format_id", "unknown"),
-            height=height,
-            filesize=fmt.get("filesize") or fmt.get("filesize_approx"),
-            acodec=fmt.get("acodec", "none"),
-            vcodec=fmt.get("vcodec", "none"),
-            ext=fmt.get("ext", "unknown"),
-            protocol=fmt.get("protocol", "unknown"),
+def get_metadata(filepath: str):
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-print_format", "json",
+                "-show_format",
+                "-show_streams",
+                filepath,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
         )
 
-    def get_youtube_formats(self, formats: list[dict]) -> list[FormatInfo]:
-        candidates = []
+        data = json.loads(result.stdout)
+        video_stream = next(
+            (s for s in data.get("streams", []) if s.get("codec_type") == "video"),
+            None,
+        )
 
-        for fmt in formats:
-            info = self.parse_format(fmt)
-            if not info:
-                continue
-
-            if info.height <= 1080 and info.has_audio and info.has_video:
-                candidates.append(info)
-
-        candidates.sort(key=lambda f: (f.is_hls, -f.height))
-        return candidates
-
-    def get_generic_formats(self, formats: list[dict]) -> list[FormatInfo]:
-        candidates = []
-
-        for fmt in formats:
-            info = self.parse_format(fmt)
-            if info:
-                candidates.append(info)
-
-        candidates.sort(key=lambda f: (f.is_hls, -f.height))
-        return candidates
-
-    def clear_tmpdir(self):
-        if not self.tmpdir:
-            return
-
-        for name in os.listdir(self.tmpdir):
-            path = os.path.join(self.tmpdir, name)
-            if os.path.isfile(path):
-                os.remove(path)
-
-    async def download_format(self, format_info: FormatInfo) -> Optional[str]:
-        self.clear_tmpdir()
-
-        outtmpl = os.path.join(self.tmpdir, f"%(id)s_{format_info.format_id}.%(ext)s")
-
-        ydl_opts = {
-            **BASE_YDL_OPTS,
-            "format": format_info.format_id,
-            "outtmpl": outtmpl,
-            "merge_output_format": "mp4",
-            "socket_timeout": 30,
+        metadata = {
+            "container": {
+                "file_name": data.get("format", {}).get("filename").split("\\")[-1],
+                "format_name": data.get("format", {}).get("format_name"),
+                "duration": data.get("format", {}).get("duration"),
+                "bit_rate": data.get("format", {}).get("bit_rate"),
+                "tags": data.get("format", {}).get("tags"),
+            },
+            "video_stream": {
+                "codec": video_stream.get("codec_name") if video_stream else None,
+                "profile": video_stream.get("profile") if video_stream else None,
+                "level": video_stream.get("level") if video_stream else None,
+                "pix_fmt": video_stream.get("pix_fmt") if video_stream else None,
+                "width": video_stream.get("width") if video_stream else None,
+                "height": video_stream.get("height") if video_stream else None,
+                "sample_aspect_ratio": video_stream.get("sample_aspect_ratio") if video_stream else None,
+                "display_aspect_ratio": video_stream.get("display_aspect_ratio") if video_stream else None,
+                "rotation": (
+                    video_stream.get("tags", {}).get("rotate")
+                    if video_stream and video_stream.get("tags")
+                    else None
+                ),
+                "avg_frame_rate": video_stream.get("avg_frame_rate") if video_stream else None,
+                "time_base": video_stream.get("time_base") if video_stream else None,
+            },
         }
 
-        try:
-            await asyncio.to_thread(
-                lambda: YoutubeDL(ydl_opts).download([self.url])
-            )
-        except Exception as e:
-            print(e)
-            return None
+        return metadata
 
-        files = [
-            os.path.join(self.tmpdir, f)
-            for f in os.listdir(self.tmpdir)
-            if f.endswith((".mp4", ".mkv", ".webm"))
-        ]
+    except Exception as e:
+        print("ffprobe failed:", e)
 
-        if not files:
-            return None
 
-        return files[0]
+def clear_tmpdir(tmpdir):
+    if not tmpdir:
+        return
 
-    async def download_with_smart_format(self, max_height: int) -> Optional[str]:
-        self.clear_tmpdir()
+    for name in os.listdir(tmpdir):
+        path = os.path.join(tmpdir, name)
+        if os.path.isfile(path):
+            os.remove(path)
 
-        outtmpl = os.path.join(self.tmpdir, "video.%(ext)s")
 
-        format_selector = f"bestvideo[height<={max_height}][ext=mp4]+bestaudio[ext=m4a]/best[height<={max_height}][ext=mp4]/best[height<={max_height}]"
+async def fix_video(input_path: str):
+    input_path = Path(input_path)
+    output_path = input_path.with_stem(input_path.stem + "_fixed")
 
-        ydl_opts = {
-            **BASE_YDL_OPTS,
-            "format": format_selector,
-            "outtmpl": outtmpl,
-            "merge_output_format": "mp4",
-            "socket_timeout": 30,
-        }
+    ffmpeg = await asyncio.create_subprocess_exec(
+        "ffmpeg",
+        "-i", str(input_path),
+        "-movflags", "+faststart",
+        str(output_path),
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
 
-        try:
-            await asyncio.to_thread(
-                lambda: YoutubeDL(ydl_opts).download([self.url])
-            )
-        except Exception as e:
-            print(e)
-            return None
+    _, stderr = await ffmpeg.communicate()
+    if ffmpeg.returncode != 0:
+        raise RuntimeError(stderr.decode())
 
-        files = [
-            os.path.join(self.tmpdir, f)
-            for f in os.listdir(self.tmpdir)
-            if f.endswith((".mp4", ".mkv", ".webm"))
-        ]
+    return str(output_path)
 
-        return files[0] if files else None
 
-    def check_file_size(self, filepath: str) -> tuple[bool, float]:
-        size_mb = os.path.getsize(filepath) / 1024 / 1024
-        fits = size_mb <= self.max_size_mb
-        return fits, size_mb
+async def download_video(url, tmpdir) -> Optional[str]:
+    outtmpl = os.path.join(tmpdir, f"%(id)s_.%(ext)s")
 
-    async def try_format(self, format_info: FormatInfo) -> Optional[bytes]:
-        if format_info.filesize_mb:
-            if format_info.filesize_mb > self.max_size_mb:
-                return None
+    ydl_opts = {
+        **BASE_YDL_OPTS,
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "outtmpl": outtmpl,
+        "socket_timeout": 30,
+    }
 
-        filepath = await self.download_format(format_info)
-        if not filepath:
-            return None
+    try:
+        await asyncio.to_thread(
+            lambda: YoutubeDL(ydl_opts).download([url])
+        )
+    except Exception as e:
+        print(e)
+        return None
 
-        fits, size_mb = self.check_file_size(filepath)
+    files = [
+        os.path.join(tmpdir, f)
+        for f in os.listdir(tmpdir)
+        if f.endswith(".mp4")
+    ]
 
-        if fits:
-            with open(filepath, "rb") as f:
-                return f.read()
+    if not files:
+        return None
+
+    return files[0]
+
+
+async def download_video_bytes(
+        url: str,
+        callback: Callable[[str], Awaitable[None]]
+) -> tuple[bytes, bool, bool] | None:
+    with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmpdir:
+        clear_tmpdir(tmpdir)
+        file = await download_video(url, tmpdir)
+
+        vs = get_metadata(str(file)).get('video_stream')
+        codec = vs.get('codec') if vs else None
+        w = vs.get("width") if vs else None
+        h = vs.get("height") if vs else None
+        size = round(os.path.getsize(file) / 1024 / 1024, 2)
+
+
+        if codec in CODECS_TO_REFORMAT:
+            await callback('Обработка...')
+            file = await fix_video(file)
+
+        if size <= MAX_SIZE_MB:
+            with open(file, "rb") as f:
+                return f.read(), w, h
         else:
+            await callback('Видео слишком большое, пробую сжать...')
             return None
-
-    async def try_smart_download(self, max_height: int) -> Optional[bytes]:
-        filepath = await self.download_with_smart_format(max_height)
-        if not filepath:
-            return None
-
-        fits, size_mb = self.check_file_size(filepath)
-
-        if fits:
-            with open(filepath, "rb") as f:
-                return f.read()
-        else:
-            return None
-
-    async def download_youtube(self, formats: list[FormatInfo]) -> bytes | int:
-        for target_height in (1080, 720):
-            matching_formats = [f for f in formats if f.height == target_height and not f.is_hls]
-
-            if matching_formats:
-                for format_info in matching_formats[:3]:
-                    result = await self.try_format(format_info)
-                    if result:
-                        return result
-
-            hls_formats = [f for f in formats if f.height == target_height and f.is_hls]
-            if hls_formats:
-                for format_info in hls_formats[:2]:
-                    result = await self.try_format(format_info)
-                    if result:
-                        return result
-
-            result = await self.try_smart_download(target_height)
-            if result:
-                return result
-
-        return 0
-
-    async def download_generic(self, formats: list[FormatInfo]) -> bytes | int:
-        for format_info in formats:
-            result = await self.try_format(format_info)
-            if result:
-                return result
-
-        return 0
-
-    async def download(self) -> bytes | int:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            self.tmpdir = tmpdir
-
-            try:
-                info = await asyncio.to_thread(
-                    lambda: YoutubeDL(BASE_YDL_OPTS).extract_info(self.url, download=False)
-                )
-            except Exception as e:
-                print(e)
-                return 0
-
-            ext_key = info.get('extractor_key', '').lower()
-            formats = info.get('formats', [])
-
-            if ext_key == "youtube":
-                candidates = self.get_youtube_formats(formats)
-                if not candidates:
-                    return 0
-                return await self.download_youtube(candidates)
-            else:
-                candidates = self.get_generic_formats(formats)
-                if not candidates:
-                    return 0
-                return await self.download_generic(candidates)
-
-
-async def download_video_bytes(url: str) -> bytes | int:
-    downloader = VideoDownloader(url, max_size_mb=MAX_SIZE_MB)
-    return await downloader.download()

@@ -26,19 +26,34 @@ async def text_private_handler(message: Message):
         log_message(request_type='yt-dlp', message=message)
         return
 
+    if 'youtube' in url or 'youtu.be' in url:
+        await message.reply('Ютуп пока не хаваю =(')
+        log_message(request_type='yt-dlp', message=message)
+        return
+
     ans = await message.reply('Загрузка может занять время...')
+
+    async def progress_callback(step: str):
+        await ans.edit_text(text=step)
+
     try:
-        video_bytes = await download_video_bytes(url)
+        video_bytes, width, height = await download_video_bytes(url, progress_callback)
     except Exception as e:
-        await ans.edit_text('Ниасилил...( Либо слишком длинный видос, либо неподдерживаемый сайт(')
+        await progress_callback('Ниасилил...( Либо слишком длинный видос, либо неподдерживаемый сайт(')
         log_error(request_type='yt-dlp', message=message, chat_id=chat_id, error=e)
         return
 
     if video_bytes:
-        ans = await ans.edit_text('Скачал, отправляю...')
-        await message.reply_video(BufferedInputFile(video_bytes, filename="video.mp4"))
+        await progress_callback('Отправляю...')
+        try:
+            await message.reply_video(BufferedInputFile(video_bytes, filename="video.mp4"),
+                                      width=width,
+                                      height=height)
+        except Exception as e:
+            await progress_callback('Телеграм не пускает =(')
+            log_error(request_type='yt-dlp', message=message, chat_id=chat_id, error=e)
         await ans.delete()
     else:
-        await ans.edit_text('Ниасилил...( Либо слишком длинный видос, либо неподдерживаемый сайт(')
+        await progress_callback('Ниасилил... Cлишком длинный видос =(')
         log_error(request_type='yt-dlp', message=message, chat_id=chat_id, error='video_bytes is None')
     log_message(request_type='yt-dlp', message=message)
