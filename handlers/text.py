@@ -39,7 +39,7 @@ async def text_private_handler(message: Message):
     try:
         video_bytes, width, height = await download_video_bytes(url, progress_callback)
     except Exception as e:
-        await progress_callback('Ниасилил...( Либо слишком длинный видос, либо неподдерживаемый сайт(')
+        await progress_callback('Ниасилил...( Неподдерживаемый сайт')
         log_error(request_type='yt-dlp', message=message, chat_id=chat_id, error=e)
         return
 
@@ -54,6 +54,6 @@ async def text_private_handler(message: Message):
             log_error(request_type='yt-dlp', message=message, chat_id=chat_id, error=e)
         await ans.delete()
     else:
-        await progress_callback('Ниасилил... Cлишком длинный видос =(')
+        await progress_callback('Cлишком длинное видео')
         log_error(request_type='yt-dlp', message=message, chat_id=chat_id, error='video_bytes is None')
     log_message(request_type='yt-dlp', message=message)

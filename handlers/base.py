@@ -14,11 +14,10 @@ async def cmd_start(message: Message):
     uid = message.from_user.id
 
     welcome_text = (
-        f"🔗 *Linkinzzz* – бот для скачивания контента.\n"
-        f"Просто отправьте ссылку!\n\n"
-        f"Использует `yt-dlp`\n"
-        # f"Список поддерживаемых сайтов: link\n\n"
+        "🔗 *Linkinzzz* – бот для скачивания контента.\n"
+        "Просто отправьте ссылку!\n\n"
+        "Использует [yt-dlp](https://github.com/yt-dlp/yt-dlp) и [ffmpeg](https://github.com/FFmpeg/FFmpeg)"
     )
 
-    await message.answer(welcome_text, parse_mode="Markdown")
+    await message.answer(welcome_text, parse_mode="Markdown", disable_web_page_preview=True)
     log_event(event='bot_start', username=username, user_id=uid, chat_id=message.chat.id)

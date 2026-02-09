@@ -155,5 +155,4 @@ async def download_video_bytes(
             with open(file, "rb") as f:
                 return f.read(), w, h
         else:
-            await callback('Видео слишком большое, пробую сжать...')
             return None, None, None
