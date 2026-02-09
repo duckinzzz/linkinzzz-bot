@@ -107,7 +107,7 @@ async def download_video(url, tmpdir) -> Optional[str]:
 
     ydl_opts = {
         **BASE_YDL_OPTS,
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "format": "mp4",
         "outtmpl": outtmpl,
         "socket_timeout": 30,
     }
@@ -148,6 +148,7 @@ async def download_video_bytes(
 
         if codec in CODECS_TO_REFORMAT:
             await callback('Обработка...')
+            print(json.dumps(metadata))
             file = await fix_video(file)
 
         if size <= MAX_SIZE_MB:
