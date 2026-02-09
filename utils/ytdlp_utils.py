@@ -135,7 +135,7 @@ async def download_video(url, tmpdir) -> Optional[str]:
 async def download_video_bytes(
         url: str,
         callback: Callable[[str], Awaitable[None]]
-) -> tuple[bytes, bool, bool] | None:
+) -> tuple[bytes, bool, bool] | tuple[None, None, None]:
     with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmpdir:
         clear_tmpdir(tmpdir)
         file = await download_video(url, tmpdir)
@@ -146,7 +146,6 @@ async def download_video_bytes(
         h = vs.get("height") if vs else None
         size = round(os.path.getsize(file) / 1024 / 1024, 2)
 
-
         if codec in CODECS_TO_REFORMAT:
             await callback('Обработка...')
             file = await fix_video(file)
@@ -156,4 +155,4 @@ async def download_video_bytes(
                 return f.read(), w, h
         else:
             await callback('Видео слишком большое, пробую сжать...')
-            return None
+            return None, None, None
