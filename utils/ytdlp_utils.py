@@ -12,6 +12,7 @@ from utils.logging_utils import log_event, log_error
 
 MAX_SIZE_MB = 50
 BASE_YDL_OPTS = {
+    'cookiefile': 'insta_cookies.txt',
     "quiet": True,
     "enable_file_urls": True,
     "remote_components": ["ejs:github"],
@@ -109,8 +110,10 @@ async def download_video(url, tmpdir) -> Optional[str]:
             lambda: YoutubeDL(ydl_opts).download([url])
         )
     except Exception as e:
-        print(e)
-        return None
+        if "This content may be inappropriate" in str(e):
+            raise ValueError("INAPPROPRIATE_CONTENT") from e
+        log_error(request_type='download_video', error=e)
+        raise ValueError("UNABLE_TO_DOWNLOAD") from e
 
     files = [
         os.path.join(tmpdir, f)
@@ -119,7 +122,7 @@ async def download_video(url, tmpdir) -> Optional[str]:
     ]
 
     if not files:
-        return None
+        raise ValueError("NO_FILES_IN_DIRECTORY")
 
     return files[0]
 
@@ -128,7 +131,7 @@ async def download_video_bytes(
         url: str,
         callback: Callable[[str], Awaitable[None]]
 ) -> tuple[bytes, bool, bool] | tuple[None, None, None]:
-    with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmpdir:
+    with tempfile.TemporaryDirectory(dir="/tmp") as tmpdir:
         file = await download_video(url, tmpdir)
         metadata = get_metadata(str(file))
         vs = metadata.get('video_stream') if metadata else None

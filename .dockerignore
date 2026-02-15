@@ -1,0 +1,7 @@
+.venv/
+.idea/
+.git/
+.github/
+**/__pycache__/
+*.pyc
+logging/

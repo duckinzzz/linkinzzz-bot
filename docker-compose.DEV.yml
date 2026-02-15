@@ -3,6 +3,7 @@ services:
     build: .
     container_name: linkinzzz
     restart: unless-stopped
+    command: sh -c "watchfiles --ignore-paths .venv --ignore-paths .idea 'python run.py' ."
     env_file:
       - .env
     ports:
@@ -12,3 +13,5 @@ services:
       options:
         max-size: "10m"
         max-file: "1"
+    volumes:
+      - .:/app

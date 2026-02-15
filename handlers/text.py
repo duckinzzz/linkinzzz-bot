@@ -3,6 +3,7 @@ import re
 from aiogram import F, Router
 from aiogram.types import Message, BufferedInputFile
 
+from core.config import ADMIN_ID
 from utils.logging_utils import log_message, log_error
 from utils.ytdlp_utils import download_video_bytes
 
@@ -38,8 +39,16 @@ async def text_private_handler(message: Message):
 
     try:
         video_bytes, width, height = await download_video_bytes(url, progress_callback)
-    except Exception as e:
+    except ValueError as e:
+        if str(e) == "INAPPROPRIATE_CONTENT":
+            await progress_callback('Это видео пока нельзя скачать, попробуйте позже.\n'
+                                    'Разработчику отправлено уведомление об ошибке.')
+            forwarded = await message.forward(chat_id=ADMIN_ID)
+            await forwarded.answer('стухли куки')
+            return
         await progress_callback('Ниасилил😥 Неподдерживаемый сайт')
+        forwarded = await message.forward(chat_id=ADMIN_ID)
+        await forwarded.answer('пытались скачать')
         log_error(request_type='yt-dlp', message=message, chat_id=chat_id, error=e)
         return
 
