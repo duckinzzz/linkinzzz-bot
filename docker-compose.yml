@@ -1,7 +1,7 @@
 services:
   bot:
-    build: .
-    container_name: linkinzzz
+    image: ghcr.io/duckinzzz/linkinzzz-bot:latest
+    container_name: linkinzzz-bot
     restart: unless-stopped
     env_file:
       - .env
