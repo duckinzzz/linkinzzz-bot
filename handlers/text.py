@@ -27,11 +27,11 @@ async def text_private_handler(message: Message):
         return
 
     if 'youtube' in url or 'youtu.be' in url:
-        await message.reply('Ютуп пока не хаваю =(')
+        await message.reply('Ютуп пока не хаваю 🤒')
         log_message(request_type='yt-dlp', message=message)
         return
 
-    ans = await message.reply('Загрузка может занять время...')
+    ans = await message.reply('⏳Загружаю...')
 
     async def progress_callback(step: str):
         await ans.edit_text(text=step)
@@ -39,7 +39,7 @@ async def text_private_handler(message: Message):
     try:
         video_bytes, width, height = await download_video_bytes(url, progress_callback)
     except Exception as e:
-        await progress_callback('Ниасилил...( Неподдерживаемый сайт')
+        await progress_callback('Ниасилил😥 Неподдерживаемый сайт')
         log_error(request_type='yt-dlp', message=message, chat_id=chat_id, error=e)
         return
 
@@ -50,7 +50,7 @@ async def text_private_handler(message: Message):
                                       width=width,
                                       height=height)
         except Exception as e:
-            await progress_callback('Телеграм не пускает =(')
+            await progress_callback('Телеграм не пускает, попробуйте снова')
             log_error(request_type='yt-dlp', message=message, chat_id=chat_id, error=e)
         await ans.delete()
     else:

@@ -8,6 +8,8 @@ from typing import Optional, Callable, Awaitable
 
 from yt_dlp import YoutubeDL
 
+from utils.logging_utils import log_event, log_error
+
 MAX_SIZE_MB = 50
 BASE_YDL_OPTS = {
     "quiet": True,
@@ -69,17 +71,7 @@ def get_metadata(filepath: str):
         return metadata
 
     except Exception as e:
-        print("ffprobe failed:", e)
-
-
-def clear_tmpdir(tmpdir):
-    if not tmpdir:
-        return
-
-    for name in os.listdir(tmpdir):
-        path = os.path.join(tmpdir, name)
-        if os.path.isfile(path):
-            os.remove(path)
+        log_error(request_type='get_metadata', error=e)
 
 
 async def fix_video(input_path: str):
@@ -137,7 +129,6 @@ async def download_video_bytes(
         callback: Callable[[str], Awaitable[None]]
 ) -> tuple[bytes, bool, bool] | tuple[None, None, None]:
     with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmpdir:
-        clear_tmpdir(tmpdir)
         file = await download_video(url, tmpdir)
         metadata = get_metadata(str(file))
         vs = metadata.get('video_stream') if metadata else None
@@ -148,7 +139,7 @@ async def download_video_bytes(
 
         if codec in CODECS_TO_REFORMAT:
             await callback('Обработка...')
-            print(json.dumps(metadata))
+            log_event(event='fixing codec', data=json.dumps(metadata))
             file = await fix_video(file)
 
         if size <= MAX_SIZE_MB:
