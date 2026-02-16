@@ -112,7 +112,7 @@ async def download_video(url, tmpdir) -> Optional[str]:
     except Exception as e:
         if "This content may be inappropriate" in str(e):
             raise ValueError("INAPPROPRIATE_CONTENT") from e
-        if "No video formats found" in str(e):
+        if "no video" in str(e).lower():
             raise ValueError("NO_VIDEO") from e
         log_error(request_type='download_video', error=e)
         raise ValueError("UNABLE_TO_DOWNLOAD") from e
