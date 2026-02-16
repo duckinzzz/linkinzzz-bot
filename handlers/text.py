@@ -46,6 +46,9 @@ async def text_private_handler(message: Message):
             forwarded = await message.forward(chat_id=ADMIN_ID)
             await forwarded.answer('стухли куки')
             return
+        if str(e) == "NO_VIDEO":
+            await progress_callback('В посте нет видеоролика')
+            return
         await progress_callback('Ниасилил😥 Неподдерживаемый сайт')
         forwarded = await message.forward(chat_id=ADMIN_ID)
         await forwarded.answer('пытались скачать')
