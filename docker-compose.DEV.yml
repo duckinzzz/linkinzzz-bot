@@ -3,7 +3,7 @@ services:
     build: .
     container_name: linkinzzz
     restart: unless-stopped
-    command: sh -c "watchfiles --ignore-paths .venv --ignore-paths .idea 'python run.py' ."
+    command: sh -c "watchfiles --filter python 'python run.py' core handlers utils run.py"
     env_file:
       - .env
     ports:
