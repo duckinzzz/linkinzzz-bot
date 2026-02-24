@@ -252,7 +252,7 @@ async def download_post_json(url: str, callback: ProgressCallback) -> dict:
         try:
             files, caption = await download_post(url, tmpdir)
         except (UnsupportedSite, NoMedia):
-            await callback("Еще немного...")
+            await callback("⌛Еще немного...")
             log_event(event="fallback_ytdlp", data=url)
             files, caption = await download_post_ytdlp(url, tmpdir)
         return await _build_payload(files, caption, callback)
