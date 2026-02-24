@@ -5,96 +5,52 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Callable, Awaitable
+from typing import Awaitable, Callable
 
 from PIL import Image
+from yt_dlp import YoutubeDL
 
+from core.errors import InappropriateContent, NoMedia, UnsupportedSite, TooLarge
 from utils.logging_utils import log_event, log_error
 
 MAX_SIZE_MB = 50
-CODECS_TO_REFORMAT = ['vp9']
-
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm"}
+CODECS_TO_REFORMAT = {"vp9"}
+ProgressCallback = Callable[[str], Awaitable[None]]
+BASE_YDL_OPTS = {
+    "cookiefile": "insta_cookies.txt",
+    "quiet": True,
+    "enable_file_urls": True,
+    "remote_components": ["ejs:github"],
+}
 
 
-def get_metadata(filepath: str):
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v", "error",
-                "-print_format", "json",
-                "-show_format",
-                "-show_streams",
-                filepath,
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-
-        data = json.loads(result.stdout)
-        video_stream = next(
-            (s for s in data.get("streams", []) if s.get("codec_type") == "video"),
-            None,
-        )
-
-        metadata = {
-            "container": {
-                "file_name": data.get("format", {}).get("filename").split("\\")[-1],
-                "format_name": data.get("format", {}).get("format_name"),
-                "duration": data.get("format", {}).get("duration"),
-                "bit_rate": data.get("format", {}).get("bit_rate"),
-                "tags": data.get("format", {}).get("tags"),
-            },
-            "video_stream": {
-                "codec": video_stream.get("codec_name") if video_stream else None,
-                "profile": video_stream.get("profile") if video_stream else None,
-                "level": video_stream.get("level") if video_stream else None,
-                "pix_fmt": video_stream.get("pix_fmt") if video_stream else None,
-                "width": video_stream.get("width") if video_stream else None,
-                "height": video_stream.get("height") if video_stream else None,
-                "sample_aspect_ratio": video_stream.get("sample_aspect_ratio") if video_stream else None,
-                "display_aspect_ratio": video_stream.get("display_aspect_ratio") if video_stream else None,
-                "rotation": (
-                    video_stream.get("tags", {}).get("rotate")
-                    if video_stream and video_stream.get("tags")
-                    else None
-                ),
-                "avg_frame_rate": video_stream.get("avg_frame_rate") if video_stream else None,
-                "time_base": video_stream.get("time_base") if video_stream else None,
-            },
-        }
-
-        return metadata
-
-    except Exception as e:
-        log_error(request_type='get_metadata', error=e)
+def _b64_from_path(path: Path) -> str:
+    return base64.b64encode(path.read_bytes()).decode("ascii")
 
 
-async def fix_video(input_path: str):
-    input_path = Path(input_path)
-    output_path = input_path.with_stem(input_path.stem + "_fixed")
-
-    ffmpeg = await asyncio.create_subprocess_exec(
-        "ffmpeg",
-        "-i", str(input_path),
-        "-movflags", "+faststart",
-        str(output_path),
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.PIPE,
-    )
-
-    _, stderr = await ffmpeg.communicate()
-    if ffmpeg.returncode != 0:
-        raise RuntimeError(stderr.decode())
-
-    return str(output_path)
-
-
-def _b64(data: bytes) -> str:
-    return base64.b64encode(data).decode("ascii")
+def _probe_video(path: Path) -> dict:
+    out = subprocess.run(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-print_format",
+            "json",
+            "-show_streams",
+            path,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    data = json.loads(out)
+    stream = next((s for s in data.get("streams", []) if s.get("codec_type") == "video"), {})
+    return {
+        "codec": stream.get("codec_name"),
+        "width": stream.get("width"),
+        "height": stream.get("height"),
+    }
 
 
 def _pick_caption(meta: dict) -> str:
@@ -104,12 +60,7 @@ def _pick_caption(meta: dict) -> str:
         val = meta.get(key)
         if isinstance(val, str) and val.strip():
             return val.strip()
-    for path in (
-            ("post", "caption"),
-            ("post", "description"),
-            ("data", "caption"),
-            ("data", "description"),
-    ):
+    for path in (("post", "caption"), ("post", "description"), ("data", "caption"), ("data", "description")):
         cur = meta
         ok = True
         for k in path:
@@ -123,7 +74,40 @@ def _pick_caption(meta: dict) -> str:
     return ""
 
 
-async def download_post(url: str, tmpdir: str) -> tuple[list[str], str]:
+def _find_meta(tmpdir: Path) -> dict:
+    for name in os.listdir(tmpdir):
+        p = tmpdir / name
+        if p.suffix.lower() == ".json" and p.is_file():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+    return {}
+
+
+async def fix_video(input_path: str) -> str:
+    input_path = Path(input_path)
+    output_path = input_path.with_stem(input_path.stem + "_fixed")
+
+    ffmpeg = await asyncio.create_subprocess_exec(
+        "ffmpeg",
+        "-i",
+        str(input_path),
+        "-movflags",
+        "+faststart",
+        str(output_path),
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    _, stderr = await ffmpeg.communicate()
+    if ffmpeg.returncode != 0:
+        raise RuntimeError(stderr.decode())
+
+    return str(output_path)
+
+
+async def download_post(url: str, tmpdir: str) -> tuple[list[Path], str]:
     cmd = [
         "gallery-dl",
         "-D", tmpdir,
@@ -144,106 +128,131 @@ async def download_post(url: str, tmpdir: str) -> tuple[list[str], str]:
         if proc.returncode != 0:
             raise RuntimeError((err or out).decode(errors="ignore"))
     except Exception as e:
-        msg = str(e)
-        if "inappropriate" in msg.lower():
-            raise ValueError("INAPPROPRIATE_CONTENT") from e
-        if "no video" in msg.lower() or "no results" in msg.lower():
-            raise ValueError("NO_VIDEO") from e
-        log_error(request_type='download_post', error=e)
-        raise ValueError("UNABLE_TO_DOWNLOAD") from e
+        msg = str(e).lower()
+        if "inappropriate" in msg:
+            raise InappropriateContent from e
+        if "no video" in msg or "no results" in msg:
+            raise NoMedia from e
+        log_error(request_type="download_post", error=e)
+        raise UnsupportedSite from e
 
-    meta = None
+    caption = _pick_caption(_find_meta(Path(tmpdir)))
+
+    media_files: list[Path] = []
     for name in os.listdir(tmpdir):
-        p = os.path.join(tmpdir, name)
-        if name.lower().endswith(".json") and os.path.isfile(p):
-            try:
-                with open(p, "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-                break
-            except Exception:
-                pass
-
-    caption = _pick_caption(meta)
-
-    media_files: list[str] = []
-    for name in os.listdir(tmpdir):
-        p = os.path.join(tmpdir, name)
-        if not os.path.isfile(p):
+        p = Path(tmpdir) / name
+        if not p.is_file():
             continue
-        ext = Path(name).suffix.lower()
-        if ext in IMAGE_EXTS or ext in VIDEO_EXTS:
+        if p.suffix.lower() in IMAGE_EXTS or p.suffix.lower() in VIDEO_EXTS:
             media_files.append(p)
 
     if not media_files:
-        raise ValueError("NO_FILES_IN_DIRECTORY")
+        raise NoMedia
 
     return media_files, caption
 
 
-async def download_post_json(
-        url: str,
-        callback: Callable[[str], Awaitable[None]]
-) -> dict | None:
-    with tempfile.TemporaryDirectory(dir="/tmp") as tmpdir:
-        files, caption = await download_post(url, tmpdir)
+async def download_post_ytdlp(url: str, tmpdir: str) -> tuple[list[Path], str]:
+    outtmpl = str(Path(tmpdir) / "%(title)s.%(ext)s")
+    ydl_opts = {
+        **BASE_YDL_OPTS,
+        "format": "mp4",
+        "outtmpl": outtmpl,
+        "socket_timeout": 30,
+    }
 
-        content: list[dict] = []
+    try:
+        info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=True))
+    except Exception as e:
+        log_error(request_type="download_post_ytdlp", error=e)
+        raise UnsupportedSite from e
 
-        for file in files:
-            ext = Path(file).suffix.lower()
-            size_mb = round(os.path.getsize(file) / 1024 / 1024, 2)
+    caption = _pick_caption(info)
 
-            if size_mb > MAX_SIZE_MB:
-                return None
+    media_files: list[Path] = []
+    for name in os.listdir(tmpdir):
+        p = Path(tmpdir) / name
+        if not p.is_file():
+            continue
+        if p.suffix.lower() in IMAGE_EXTS or p.suffix.lower() in VIDEO_EXTS:
+            media_files.append(p)
 
-            if ext in IMAGE_EXTS:
-                try:
-                    with Image.open(file) as im:
-                        w, h = im.size
-                except Exception:
-                    w, h = None, None
+    if not media_files:
+        raise NoMedia
 
-                with open(file, "rb") as f:
-                    data = f.read()
+    return media_files, caption
 
-                content.append({
+
+async def _build_payload(
+        files: list[Path],
+        caption: str,
+        callback: ProgressCallback,
+) -> dict:
+    content: list[dict] = []
+
+    for path in files:
+        size_mb = path.stat().st_size / 1024 / 1024
+        if size_mb > MAX_SIZE_MB:
+            raise TooLarge
+
+        ext = path.suffix.lower()
+        if ext in IMAGE_EXTS:
+            try:
+                with Image.open(path) as im:
+                    width, height = im.size
+            except Exception:
+                width, height = None, None
+
+            content.append(
+                {
                     "type": "image",
-                    "data": _b64(data),
-                    "width": w,
-                    "height": h,
-                })
+                    "data": _b64_from_path(path),
+                    "width": width,
+                    "height": height,
+                }
+            )
+            continue
 
-            elif ext in VIDEO_EXTS:
-                metadata = get_metadata(str(file))
-                vs = metadata.get('video_stream') if metadata else None
-                codec = vs.get('codec') if vs else None
-                w = vs.get("width") if vs else None
-                h = vs.get("height") if vs else None
+        if ext in VIDEO_EXTS:
+            meta = _probe_video(path)
+            codec = meta.get("codec")
+            width, height = meta.get("width"), meta.get("height")
 
-                if codec in CODECS_TO_REFORMAT:
-                    await callback('Обработка...')
-                    log_event(event='fixing codec', data=json.dumps(metadata))
-                    file = await fix_video(file)
+            if codec in CODECS_TO_REFORMAT:
+                await callback("Обработка...")
+                log_event(event="fixing codec", data=json.dumps(meta))
+                path = Path(await fix_video(str(path)))
+                size_mb = path.stat().st_size / 1024 / 1024
+                if size_mb > MAX_SIZE_MB:
+                    raise TooLarge
+                meta = _probe_video(path)
+                width, height = meta.get("width") or width, meta.get("height") or height
 
-                    size_mb = round(os.path.getsize(file) / 1024 / 1024, 2)
-                    if size_mb > MAX_SIZE_MB:
-                        return None
-                    metadata = get_metadata(str(file))
-                    vs = metadata.get('video_stream') if metadata else None
-                    w = vs.get("width") if vs else w
-                    h = vs.get("height") if vs else h
-
-                with open(file, "rb") as f:
-                    data = f.read()
-
-                content.append({
+            content.append(
+                {
                     "type": "video",
-                    "data": _b64(data),
-                    "width": w,
-                    "height": h,
-                })
+                    "data": _b64_from_path(path),
+                    "width": width,
+                    "height": height,
+                }
+            )
+            continue
 
-        return {
-            "caption": caption,
-            "content": content
-        }
+    if not content:
+        raise NoMedia
+
+    return {
+        "caption": caption,
+        "content": content
+    }
+
+
+async def download_post_json(url: str, callback: ProgressCallback) -> dict:
+    with tempfile.TemporaryDirectory(dir="/tmp") as tmpdir:
+        try:
+            files, caption = await download_post(url, tmpdir)
+        except (UnsupportedSite, NoMedia):
+            await callback("Еще немного...")
+            log_event(event="fallback_ytdlp", data=url)
+            files, caption = await download_post_ytdlp(url, tmpdir)
+        return await _build_payload(files, caption, callback)

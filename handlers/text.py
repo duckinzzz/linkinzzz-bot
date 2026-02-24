@@ -4,12 +4,12 @@ from typing import Any, Dict, List
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import (Message, BufferedInputFile, InputMediaPhoto, InputMediaVideo, )
+from aiogram.types import Message, BufferedInputFile, InputMediaPhoto, InputMediaVideo
 
 from core.config import ADMIN_ID
-from core.errors import (DownloadError, InappropriateContent, NoMedia, UnsupportedSite, TooLarge, )
-from utils.logging_utils import log_message, log_error
+from core.errors import DownloadError, InappropriateContent, NoMedia, UnsupportedSite, TooLarge
 from utils.download_utils import download_post_json
+from utils.logging_utils import log_message, log_error
 
 text_router = Router()
 
@@ -105,8 +105,6 @@ async def text_private_handler(message: Message):
     try:
         await progress_callback("⏳Загружаю...")
         payload = await download_post_json(url, progress_callback)
-        if payload is None:
-            raise TooLarge("TOO_LARGE")
 
         await progress_callback("📤Отправляю...")
         await _send_payload(message, payload)
@@ -116,33 +114,7 @@ async def text_private_handler(message: Message):
         except TelegramBadRequest:
             pass
 
-        log_message(request_type='gallery-dl', message=message)
-
-    except ValueError as e:
-        code = str(e)
-
-        if code == "INAPPROPRIATE_CONTENT":
-            await progress_callback("Это видео пока нельзя скачать, попробуйте позже.\n"
-                                    "Разработчику отправлено уведомление об ошибке.")
-            await _notify_admin(message, "стухли куки")
-            log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
-            return
-
-        if code == "NO_VIDEO":
-            await progress_callback("В посте нет видеоролика/медиа")
-            log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
-            return
-
-        if code in ("UNABLE_TO_DOWNLOAD", "NO_FILES_IN_DIRECTORY"):
-            await progress_callback("Ниасилил😥 Неподдерживаемый сайт")
-            await _notify_admin(message, "пытались скачать")
-            log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
-            return
-
-        await progress_callback("Ошибка загрузки 😥 Попробуйте снова")
-        await _notify_admin(message, f"пытались скачать (ValueError: {code})")
-        log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
-        return
+        log_message(request_type="gallery-dl", message=message)
 
     except InappropriateContent as e:
         await progress_callback("Это видео пока нельзя скачать, попробуйте позже.\n"
