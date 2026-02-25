@@ -41,7 +41,7 @@ async def _make_progress(message: Message):
 
 
 async def _send_payload(message: Message, payload: Dict[str, Any]):
-    caption: str = f"<blockquote expandable>{payload.get("caption")}</blockquote>" or ""
+    caption: str = f"<blockquote expandable>{payload.get("caption")[:800]}...</blockquote>" or ""
     content: List[Dict[str, Any]] = payload.get("content") or []
 
     if not content:
