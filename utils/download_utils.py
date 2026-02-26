@@ -19,7 +19,6 @@ VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm"}
 CODECS_TO_REFORMAT = {"vp9"}
 ProgressCallback = Callable[[str], Awaitable[None]]
 BASE_YDL_OPTS = {
-    "cookiefile": "insta_cookies.txt",
     "quiet": True,
     "enable_file_urls": True,
     "remote_components": ["ejs:github"],
