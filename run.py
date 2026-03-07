@@ -39,7 +39,7 @@ def main():
 
 async def main_polling():
     dp.include_router(get_main_router())
-    asyncio.create_task(cookies_updater())
+    # asyncio.create_task(cookies_updater())
     logger.info(f"[{ENV}] Starting bot in long-polling mode...")
 
     try:
