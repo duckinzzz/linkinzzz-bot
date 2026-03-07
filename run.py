@@ -6,12 +6,14 @@ from aiohttp.web_app import Application
 
 from core.app import bot, dp
 from core.config import WEBHOOK_HOST, WEBHOOK_PORT, WEBHOOK_PATH, ENV, WEBHOOK_URL
+from core.ig_cookies_updater import cookies_updater
 from handlers import get_main_router
 from utils.logging_utils import logger
 
 
 async def on_startup(_: Application) -> None:
     dp.include_router(get_main_router())
+    asyncio.create_task(cookies_updater())
     await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
     logger.info(f"[{ENV}] Webhook set to {WEBHOOK_URL}")
 
@@ -37,6 +39,7 @@ def main():
 
 async def main_polling():
     dp.include_router(get_main_router())
+    asyncio.create_task(cookies_updater())
     logger.info(f"[{ENV}] Starting bot in long-polling mode...")
 
     try:

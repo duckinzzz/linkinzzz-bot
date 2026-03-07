@@ -11,6 +11,7 @@ from PIL import Image
 from yt_dlp import YoutubeDL
 
 from core.errors import InappropriateContent, NoMedia, UnsupportedSite, TooLarge
+from core.config import BASE_DIR
 from utils.logging_utils import log_event, log_error
 
 MAX_SIZE_MB = 50
@@ -111,7 +112,7 @@ async def download_post(url: str, tmpdir: str) -> tuple[list[Path], str]:
         "gallery-dl",
         "-D", tmpdir,
         "--write-metadata",
-        "--cookies", "insta_cookies.txt",
+        "--cookies", os.path.join(BASE_DIR, "insta_cookies.txt"),
         # downloading merged format is more likely to be compatible with TG, but might be a lot heavier in some cases
         "-o", "extractor.instagram.videos=merged",
         url,

@@ -1,8 +1,9 @@
 services:
   bot:
-    build: .
+    build:
+      context: .
+      dockerfile: DEV.Dockerfile
     container_name: linkinzzz
-    restart: unless-stopped
     command: sh -c "watchfiles --filter python 'python run.py' core handlers utils run.py"
     env_file:
       - .env
@@ -15,3 +16,7 @@ services:
         max-file: "1"
     volumes:
       - .:/app
+      - playwright-cache:/ms-playwright
+
+volumes:
+  playwright-cache:
