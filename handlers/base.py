@@ -16,7 +16,7 @@ async def cmd_start(message: Message):
     welcome_text = (
         "🔗 *Linkinzzz* – бот для скачивания контента.\n"
         "Просто отправьте ссылку!\n\n"
-        "Использует [yt-dlp](https://github.com/yt-dlp/yt-dlp) и [ffmpeg](https://github.com/FFmpeg/FFmpeg)"
+        "Использует [gallery-dl](https://github.com/mikf/gallery-dl), [yt-dlp](https://github.com/yt-dlp/yt-dlp) и [ffmpeg](https://github.com/FFmpeg/FFmpeg)"
     )
 
     await message.answer(welcome_text, parse_mode="Markdown", disable_web_page_preview=True)

@@ -247,11 +247,13 @@ async def _build_payload(
 
 
 async def download_post_json(url: str, callback: ProgressCallback) -> dict:
-    with tempfile.TemporaryDirectory(dir="/tmp") as tmpdir:
-        try:
+    try:
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmpdir:
             files, caption = await download_post(url, tmpdir)
-        except (UnsupportedSite, NoMedia):
-            await callback("⌛Еще немного...")
-            log_event(event="fallback_ytdlp", data=url)
+            return await _build_payload(files, caption, callback)
+    except (UnsupportedSite, NoMedia, TooLarge):
+        await callback("⌛Еще немного...")
+        log_event(event="fallback_ytdlp", data=url)
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmpdir:
             files, caption = await download_post_ytdlp(url, tmpdir)
-        return await _build_payload(files, caption, callback)
+            return await _build_payload(files, caption, callback)
