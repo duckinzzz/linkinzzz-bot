@@ -156,6 +156,52 @@ async def run_automation():
                 await send_message("✅ Instagram: Cookies successfully updated!")
             elif "accounts/edit" in current_url:
                 print("[IG_UPDTR] ✨ Session is still active.")
+            elif current_url.endswith("instagram.com/"):
+                print("[IG_UPDTR] ℹ️ 'Continue' page")
+
+                try:
+                    cntn_bnt = page.locator(':text("Continue"), :text("Продолжить")').first
+                    await cntn_bnt.wait_for(state="visible", timeout=10000)
+                    await cntn_bnt.click()
+                    print("[IG_UPDTR] 🔘 Clicked 'Continue' button")
+                    password_input = page.locator('form input[type="password"], input[name="password"]').first
+                    await password_input.click()
+                    await page.wait_for_timeout(random.randint(500, 1500))
+                    await password_input.press_sequentially(IG_PASSWORD, delay=random.randint(100, 250))
+
+                    await page.wait_for_timeout(random.randint(500, 1000))
+
+                    await password_input.press("Enter")
+                    try:
+                        save_btn = page.locator(
+                            'button:has-text("Save info"), button:has-text("Сохранить данные")').first
+                        await save_btn.wait_for(state="visible", timeout=10000)
+                        await save_btn.click()
+                        print("[IG_UPDTR] 🔘 Clicked 'Save info' button")
+                    except Exception:
+                        print("[IG_UPDTR] ℹ️ 'Save info' window didn't appear or was skipped.")
+
+                    try:
+                        notify_btn = page.locator(
+                            'button:has-text("Not Now")').first
+                        await notify_btn.wait_for(state="visible", timeout=10000)
+                        await notify_btn.click()
+                        print("[IG_UPDTR] 🔘 Clicked 'Not Now' button")
+                    except Exception:
+                        print("[IG_UPDTR] ℹ️ 'Turn on Notifications' window didn't appear or was skipped.")
+
+                    await page.wait_for_timeout(3000)
+                    await page.goto("https://www.instagram.com/accounts/edit/", wait_until="domcontentloaded")
+                    await page.wait_for_timeout(5000)
+
+                    await save_cookies(context)
+                    await send_message("✅ Instagram: Cookies successfully updated!")
+
+                except Exception as e:
+                    error_msg = str(e).split('\n')[0]
+                    print("[IG_UPDTR] ℹ️ 'Continue' window didn't appear or was skipped.")
+                    screenshot = await page.screenshot(full_page=True)
+                    await send_photo(screenshot, f"❌ Instagram Error:\n{error_msg}")
 
             else:
                 raise Exception(f"Block or unknown page. URL: {current_url}")
