@@ -99,10 +99,10 @@ async def text_private_handler(message: Message):
         log_message(request_type='gallery-dl', message=message)
         return
 
-    if 'youtube' in url or 'youtu.be' in url:
-        await message.reply('Ютуп пока не хаваю 🤒')
-        log_message(request_type='gallery-dl', message=message)
-        return
+    # if 'youtube' in url or 'youtu.be' in url:
+    #     await message.reply('Ютуп пока не хаваю 🤒')
+    #     log_message(request_type='gallery-dl', message=message)
+    #     return
 
     status, progress_callback = await _make_progress(message)
 

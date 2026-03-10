@@ -202,6 +202,26 @@ async def run_automation():
                     print("[IG_UPDTR] ℹ️ 'Continue' window didn't appear or was skipped.")
                     screenshot = await page.screenshot(full_page=True)
                     await send_photo(screenshot, f"❌ Instagram Error:\n{error_msg}")
+            elif "challenge/" in current_url:
+                print("[IG_UPDTR] ℹ️ 'Automated behaviour' page")
+
+                try:
+                    dsms_bnt = page.locator(':text("Dismiss"), :text("Отклонить")').first
+                    await dsms_bnt.wait_for(state="visible", timeout=10000)
+                    await dsms_bnt.click()
+                    print("[IG_UPDTR] 🔘 Clicked 'Dismiss' button")
+
+                    await page.wait_for_timeout(3000)
+                    await page.goto("https://www.instagram.com/accounts/edit/", wait_until="domcontentloaded")
+                    await page.wait_for_timeout(5000)
+
+                    await save_cookies(context)
+                    await send_message("✅ Instagram: Cookies successfully updated!")
+                except Exception as e:
+                    error_msg = str(e).split('\n')[0]
+                    print("[IG_UPDTR] ℹ️ 'Automated behaviour' window error.")
+                    screenshot = await page.screenshot(full_page=True)
+                    await send_photo(screenshot, f"❌ Instagram Error:\n{error_msg}")
 
             else:
                 raise Exception(f"Block or unknown page. URL: {current_url}")
