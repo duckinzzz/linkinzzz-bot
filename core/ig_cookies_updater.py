@@ -10,7 +10,7 @@ from playwright.async_api import async_playwright
 from core.config import IG_USERNAME, IG_PASSWORD, BOT_TOKEN, ADMIN_ID, BASE_DIR
 
 COOKIE_FILE = os.path.join(BASE_DIR, 'insta_cookies.txt')
-CHECK_INTERVAL = 3600
+CHECK_INTERVAL = 86400
 INSTAGRAM_EDIT_URL = 'https://www.instagram.com/accounts/edit/'
 SAVE_INFO_SELECTOR = 'button:has-text("Save info"), button:has-text("Сохранить данные")'
 CONTINUE_SELECTOR = ':text("Continue"), :text("Продолжить")'
