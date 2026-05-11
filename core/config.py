@@ -14,6 +14,7 @@ WEBHOOK_HOST = os.getenv("WEBHOOK_HOST", "0.0.0.0")
 WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", 8080))
 IG_USERNAME = os.getenv("IG_USERNAME")
 IG_PASSWORD = os.getenv("IG_PASSWORD")
+BOTSTATS_API_TOKEN = os.getenv("BOTSTATS_API_TOKEN")
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN not found")
