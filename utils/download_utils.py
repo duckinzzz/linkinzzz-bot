@@ -5,7 +5,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Optional
 
 from PIL import Image
 from yt_dlp import YoutubeDL
@@ -112,29 +112,65 @@ async def download_post(url: str, tmpdir: str) -> tuple[list[Path], str]:
         "gallery-dl",
         "-D", tmpdir,
         "--write-metadata",
-        "--cookies", os.path.join(BASE_DIR, "insta_cookies.txt"),
+        # "--cookies", os.path.join(BASE_DIR, "insta_cookies.txt"),
         # downloading merged format is more likely to be compatible with TG, but might be a lot heavier in some cases
         "-o", "extractor.instagram.videos=merged",
         url,
     ]
 
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    async def _read_stderr():
+        """Read stderr line by line, returning (lines, early_exit_reason)."""
+        lines: list[str] = []
+        while True:
+            line = await proc.stderr.readline()
+            if not line:
+                return lines, None
+            decoded = line.decode(errors="ignore")
+            lines.append(decoded)
+            if "429" in decoded or "Too Many Requests" in decoded:
+                return lines, "rate_limit"
+            if "redirect to login" in decoded.lower():
+                return lines, "auth_error"
+
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        out, err = await proc.communicate()
-        if proc.returncode != 0:
-            raise RuntimeError((err or out).decode(errors="ignore"))
-    except Exception as e:
-        msg = str(e).lower()
+        stderr_lines, early_exit = await asyncio.wait_for(_read_stderr(), timeout=120)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        log_error(request_type="download_post", error=TimeoutError("gallery-dl timed out"))
+        raise UnsupportedSite from TimeoutError("gallery-dl timed out")
+
+    if early_exit == "rate_limit":
+        proc.kill()
+        await proc.wait()
+        log_event(event="gallery_dl_rate_limited", data=url)
+        raise UnsupportedSite(RuntimeError("".join(stderr_lines)))
+
+    if early_exit == "auth_error":
+        proc.kill()
+        await proc.wait()
+        raise InappropriateContent(RuntimeError("".join(stderr_lines)))
+
+    # Normal exit — read remaining buffers
+    stdout_data = await proc.stdout.read()
+    stderr_remaining = await proc.stderr.read()
+    stderr_text = "".join(stderr_lines) + stderr_remaining.decode(errors="ignore")
+    stdout_text = stdout_data.decode(errors="ignore")
+
+    if proc.returncode != 0:
+        msg = (stderr_text or stdout_text).lower()
         if "inappropriate" in msg:
-            raise InappropriateContent from e
+            raise InappropriateContent(RuntimeError(stderr_text or stdout_text))
         if "no video" in msg or "no results" in msg:
-            raise NoMedia from e
-        log_error(request_type="download_post", error=e)
-        raise UnsupportedSite from e
+            raise NoMedia(RuntimeError(stderr_text or stdout_text))
+        log_error(request_type="download_post", error=RuntimeError(stderr_text or stdout_text))
+        raise UnsupportedSite(RuntimeError(stderr_text or stdout_text))
 
     caption = _pick_caption(_find_meta(Path(tmpdir)))
 
@@ -247,10 +283,22 @@ async def _build_payload(
     }
 
 
-async def download_post_json(url: str, callback: ProgressCallback) -> dict:
+async def download_post_json(
+    url: str,
+    callback: ProgressCallback,
+    on_cookies_expired: Optional[Callable[[], Awaitable[None]]] = None,
+) -> dict:
     try:
         with tempfile.TemporaryDirectory(dir="/tmp") as tmpdir:
             files, caption = await download_post(url, tmpdir)
+            return await _build_payload(files, caption, callback)
+    except InappropriateContent:
+        if on_cookies_expired:
+            await on_cookies_expired()
+        log_event(event="fallback_ytdlp_cookies", data=url)
+        await callback("⌛Еще немного...")
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmpdir:
+            files, caption = await download_post_ytdlp(url, tmpdir)
             return await _build_payload(files, caption, callback)
     except (UnsupportedSite, NoMedia, TooLarge):
         await callback("⌛Еще немного...")

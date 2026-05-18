@@ -108,7 +108,10 @@ async def text_private_handler(message: Message):
 
     try:
         await progress_callback("⏳Загружаю...")
-        payload = await download_post_json(url, progress_callback)
+        payload = await download_post_json(
+            url, progress_callback,
+            on_cookies_expired=lambda: _notify_admin(message, "стухли куки"),
+        )
 
         await progress_callback("📤Отправляю...")
         await _send_payload(message, payload)
