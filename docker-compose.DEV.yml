@@ -16,6 +16,3 @@ services:
         max-file: "1"
     volumes:
       - .:/app
-
-volumes:
-  playwright-cache:
