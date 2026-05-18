@@ -26,26 +26,6 @@ services:
       - "traefik.http.routers.webhook_link.tls=true"
       - "traefik.http.services.webhook_link.loadbalancer.server.port=8081"
 
-#  linkinzzz-ig-cookies-updater:
-#    image: ghcr.io/duckinzzz/linkinzzz-bot:latest
-#    container_name: linkinzzz-ig-cookies-updater
-#    command: ["python", "run_ig_cookies_updater.py"]
-#    restart: unless-stopped
-#    env_file:
-#      - .env
-#    logging:
-#      driver: "json-file"
-#      options:
-#        max-size: "10m"
-#        max-file: "1"
-#    volumes:
-#      - ./insta_cookies.txt:/app/insta_cookies.txt
-#    mem_limit: 300m
-#    mem_reservation: 100m
-#    cpus: 0.20
-#    networks:
-#      - proxy
-
 networks:
   proxy:
     external: true

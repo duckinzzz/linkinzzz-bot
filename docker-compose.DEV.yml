@@ -17,22 +17,5 @@ services:
     volumes:
       - .:/app
 
-#  ig-cookies-updater:
-#    build:
-#      context: .
-#      dockerfile: DEV.Dockerfile
-#    container_name: linkinzzz-ig-updater
-#    command: sh -c "watchfiles --filter python 'python run_ig_cookies_updater.py' core utils run_ig_cookies_updater.py"
-#    env_file:
-#      - .env
-#    logging:
-#      driver: "json-file"
-#      options:
-#        max-size: "10m"
-#        max-file: "1"
-#    volumes:
-#      - .:/app
-#      - playwright-cache:/ms-playwright
-
 volumes:
   playwright-cache:
