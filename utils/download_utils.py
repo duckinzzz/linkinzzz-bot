@@ -22,6 +22,7 @@ ProgressCallback = Callable[[str], Awaitable[None]]
 BASE_YDL_OPTS = {
     "quiet": True,
     "enable_file_urls": True,
+    "js_runtimes": {"deno": {}},
     "remote_components": ["ejs:github"],
 }
 
@@ -195,7 +196,13 @@ async def download_post_ytdlp(url: str, tmpdir: str) -> tuple[list[Path], str]:
     outtmpl = str(Path(tmpdir) / "%(title)s.%(ext)s")
     ydl_opts = {
         **BASE_YDL_OPTS,
-        "format": "mp4",
+        "format": (
+            "bv*[ext=mp4][vcodec^=avc1][protocol^=http]+"
+            "ba[ext=m4a][protocol^=http]/"
+            "b[ext=mp4][vcodec^=avc1][protocol^=http]/"
+            "18"
+        ),
+        "merge_output_format": "mp4",
         "outtmpl": outtmpl,
         "socket_timeout": 30,
     }
