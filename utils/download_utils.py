@@ -167,15 +167,6 @@ async def download_post(url: str, tmpdir: str) -> tuple[list[Path], str]:
     stderr_text = "".join(stderr_lines) + stderr_remaining.decode(errors="ignore")
     stdout_text = stdout_data.decode(errors="ignore")
 
-    if proc.returncode != 0:
-        msg = (stderr_text or stdout_text).lower()
-        if "inappropriate" in msg:
-            raise InappropriateContent(RuntimeError(stderr_text or stdout_text))
-        if "no video" in msg or "no results" in msg:
-            raise NoMedia(RuntimeError(stderr_text or stdout_text))
-        log_error(request_type="download_post", error=RuntimeError(stderr_text or stdout_text))
-        raise UnsupportedSite(RuntimeError(stderr_text or stdout_text))
-
     caption = _pick_caption(_find_meta(Path(tmpdir)))
 
     media_files: list[Path] = []
@@ -186,10 +177,19 @@ async def download_post(url: str, tmpdir: str) -> tuple[list[Path], str]:
         if p.suffix.lower() in IMAGE_EXTS or p.suffix.lower() in VIDEO_EXTS:
             media_files.append(p)
 
-    if not media_files:
-        raise NoMedia
+    if media_files:
+        return media_files, caption
 
-    return media_files, caption
+    if proc.returncode != 0:
+        msg = (stderr_text or stdout_text).lower()
+        if "inappropriate" in msg:
+            raise InappropriateContent(RuntimeError(stderr_text or stdout_text))
+        if "no video" in msg or "no results" in msg:
+            raise NoMedia(RuntimeError(stderr_text or stdout_text))
+        log_error(request_type="download_post", error=RuntimeError(stderr_text or stdout_text))
+        raise UnsupportedSite(RuntimeError(stderr_text or stdout_text))
+
+    raise NoMedia
 
 
 async def download_post_ytdlp(url: str, tmpdir: str) -> tuple[list[Path], str]:
