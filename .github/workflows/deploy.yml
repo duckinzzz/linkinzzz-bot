@@ -52,17 +52,16 @@ jobs:
             ADMIN_ID=${{ secrets.ADMIN_ID }}
             BOT_TOKEN=${{ secrets.BOT_TOKEN }}
             BOT_USERNAME=${{ secrets.BOT_USERNAME }}
+            BOTSTATS_API_TOKEN=${{ secrets.BOTSTATS_API_TOKEN }}            
 
             WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}
             WEBHOOK_PATH=${{ secrets.WEBHOOK_PATH }}
             WEBHOOK_HOST=${{ secrets.WEBHOOK_HOST }}
             WEBHOOK_PORT=${{ secrets.WEBHOOK_PORT }}
-            
-            IG_USERNAME=${{ secrets.IG_USERNAME }}
-            IG_PASSWORD=${{ secrets.IG_PASSWORD }}
             EOF
 
             IMAGE_TAG=${{ github.sha }}
 
             docker compose pull
+            mkdir -p cookies
             docker compose up -d --force-recreate --remove-orphans

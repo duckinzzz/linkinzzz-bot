@@ -17,9 +17,10 @@ jobs:
           script: |
             cd /srv/bots/linkinzzz-bot
             
-            cat << 'EOF' > insta_cookies.txt
+            mkdir -p cookies
+            cat << 'EOF' > cookies/insta_cookies.txt
             ${{ secrets.INSTAGRAM_COOKIES }}
             EOF
-            
-            chmod 600 insta_cookies.txt
+
+            chmod 600 cookies/insta_cookies.txt
             echo "Cookies updated"
