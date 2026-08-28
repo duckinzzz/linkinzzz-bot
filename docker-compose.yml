@@ -18,14 +18,12 @@ services:
     mem_reservation: 100m
     cpus: 0.20
     networks:
-      - proxy
+      - caddy-proxy
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.webhook_link.rule=Host(`webhook.duckinzzz.ru`) && PathPrefix(`/linkinzzz`)"
-      - "traefik.http.routers.webhook_link.entrypoints=websecure"
-      - "traefik.http.routers.webhook_link.tls=true"
-      - "traefik.http.services.webhook_link.loadbalancer.server.port=8081"
-
+      caddy: webhook.duckinzzz.ru
+      caddy.handle: /linkinzzz*
+      caddy.handle.reverse_proxy: "{{upstreams 8081}}"
+      
 networks:
-  proxy:
+  caddy-proxy:
     external: true
