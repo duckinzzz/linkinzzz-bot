@@ -8,7 +8,7 @@ from aiogram.types import Message, TelegramObject
 from core.config import BOTSTATS_API_TOKEN, BOT_USERNAME
 from utils.logging_utils import logger
 
-BOTSTATS_URL = "http://duckinzzz.ru/botstats/api/"
+BOTSTATS_URL = "https://botstats.duckinzzz.ru/api/"
 
 
 class BotStatsMiddleware(BaseMiddleware):
