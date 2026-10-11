@@ -64,4 +64,5 @@ jobs:
 
             docker compose pull
             mkdir -p cookies
+            mkdir -p data
             docker compose up -d --force-recreate --remove-orphans
