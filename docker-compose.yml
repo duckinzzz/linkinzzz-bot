@@ -14,6 +14,7 @@ services:
         max-file: "1"
     volumes:
       - ./cookies:/app/cookies
+      - ./data:/app/data
     mem_limit: 300m
     mem_reservation: 100m
     cpus: 0.20

@@ -6,3 +6,4 @@ __pycache__/
 *.log
 cookies/
 insta_cookies.txt
+data/

@@ -15,6 +15,8 @@ WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", 8080))
 IG_USERNAME = os.getenv("IG_USERNAME")
 IG_PASSWORD = os.getenv("IG_PASSWORD")
 BOTSTATS_API_TOKEN = os.getenv("BOTSTATS_API_TOKEN")
+CACHE_DB_PATH = os.getenv("CACHE_DB_PATH", os.path.join(BASE_DIR, "data", "cache.db"))
+CACHE_TTL_DAYS = int(os.getenv("CACHE_TTL_DAYS", "30"))
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN not found")

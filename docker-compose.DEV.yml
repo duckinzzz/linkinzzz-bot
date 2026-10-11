@@ -7,8 +7,9 @@ services:
     command: sh -c "watchfiles --filter python 'python run.py' core handlers utils run.py"
     env_file:
       - .env
-    ports:
-      - "8080:8080"
+    # host-сеть: трафик docker-бриджа не идёт через VPN (throne-tun) на хосте —
+    # из бриджа недоступны ни api.telegram.org, ни instagram.com
+    network_mode: host
     logging:
       driver: "json-file"
       options:

@@ -7,11 +7,18 @@ from aiohttp.web_app import Application
 from core.app import bot, dp
 from core.config import WEBHOOK_HOST, WEBHOOK_PORT, WEBHOOK_PATH, ENV, WEBHOOK_URL
 from handlers import get_main_router
+from utils import cache
 from utils.logging_utils import logger
+
+
+async def _prepare_cache() -> None:
+    await cache.init_db()
+    await cache.purge_expired()
 
 
 async def on_startup(_: Application) -> None:
     dp.include_router(get_main_router())
+    await _prepare_cache()
     await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
     logger.info(f"[{ENV}] Webhook set to {WEBHOOK_URL}")
 
@@ -37,6 +44,7 @@ def main():
 
 async def main_polling():
     dp.include_router(get_main_router())
+    await _prepare_cache()
     logger.info(f"[{ENV}] Starting bot in long-polling mode...")
 
     try:
