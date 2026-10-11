@@ -15,9 +15,12 @@ ENV DENO_INSTALL=/root/.deno
 ENV PATH="$DENO_INSTALL/bin:$PATH"
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
-COPY requirements.txt .
-RUN uv pip install --system -r requirements.txt
+
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
 ENV PYTHONUNBUFFERED=1
+ENV PATH="/opt/venv/bin:$PATH"
 
 CMD ["python", "run.py"]

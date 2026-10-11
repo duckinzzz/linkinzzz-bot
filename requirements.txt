@@ -1,8 +1,0 @@
-watchfiles
-aiohttp
-curl-cffi
-yt-dlp
-aiogram==3.24.0
-python-dotenv==1.2.1
-gallery-dl
-pillow
