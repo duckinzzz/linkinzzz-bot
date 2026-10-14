@@ -37,6 +37,12 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare compose payload
+        run: echo "COMPOSE_B64=$(base64 -w0 docker-compose.yml)" >> "$GITHUB_ENV"
+
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.2.4
         with:
@@ -44,8 +50,14 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
+          envs: COMPOSE_B64
           script: |
             cd /srv/bots/linkinzzz-bot
+
+            # compose живёт в репозитории. Без этой доставки файл на сервере отстаёт
+            # от репо: так на прод не доехал volume ./data под кэш медиа, и база кэша
+            # жила внутри контейнера, умирая при каждом --force-recreate
+            echo "$COMPOSE_B64" | base64 -d > docker-compose.yml
 
             cat > .env <<EOF
             ENV=${{ secrets.ENV }}
