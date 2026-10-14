@@ -25,6 +25,30 @@ BASE_YDL_OPTS = {
     "js_runtimes": {"deno": {}},
     "remote_components": ["ejs:github"],
 }
+# avc1 в приоритете как самый совместимый с телеграмом, дальше — любой другой mp4.
+DEFAULT_FORMAT = (
+    "bv*[ext=mp4][vcodec^=avc1][protocol^=http]+"
+    "ba[ext=m4a][protocol^=http]/"
+    "b[ext=mp4][vcodec^=avc1][protocol^=http]/"
+    "bv*[ext=mp4][protocol^=http]+"
+    "ba[ext=m4a][protocol^=http]/"
+    "b[ext=mp4][protocol^=http]/"
+    "bv*+ba/b"
+)
+# Instagram: avc1-DASH есть не всегда, а vp9-DASH уезжает в перекодировку
+# (vp9→x264 стоит ~70 секунд ядра, на проде это минуты ожидания). Поэтому
+# прогрессивный mp4 — у IG это легаси-форматы 1/2/3, h264+aac одним файлом —
+# стоит выше vp9, чтобы телеграм получил готовый файл. Если прогрессивного нет,
+# селектор доходит до vp9, и кодек чинит fix_video.
+INSTAGRAM_FORMAT = (
+    "bv*[ext=mp4][vcodec^=avc1][protocol^=http]+"
+    "ba[ext=m4a][protocol^=http]/"
+    "b[ext=mp4][vcodec^=avc1][protocol^=http]/"
+    "b[ext=mp4][protocol^=http]/"
+    "bv*[ext=mp4][protocol^=http]+"
+    "ba[ext=m4a][protocol^=http]/"
+    "bv*+ba/b"
+)
 
 
 def _b64_from_path(path: Path) -> str:
@@ -91,10 +115,15 @@ async def fix_video(input_path: str) -> str:
     output_path = input_path.with_stem(input_path.stem + "_fixed")
 
     ffmpeg = await asyncio.create_subprocess_exec(
+        # лимиты CPU с контейнера сняты, поэтому вежливость к соседям по хосту задаём
+        # сами: в простое ffmpeg забирает ядро целиком, под конкуренцией уступает.
+        "nice",
+        "-n",
+        "10",
         "ffmpeg",
         "-y",
-        # прод-контейнер живёт с mem_limit 300m на хосте с 1 ГБ RAM: дефолтный пресет
-        # x264 и многопоточный vp9-декодер туда не влезают, ffmpeg убивает OOM-killer.
+        # дефолтный пресет x264 и многопоточный vp9-декодер не влезают в память
+        # (на хосте 1 ГБ на два десятка контейнеров): ffmpeg убивает OOM-killer.
         # Ограничиваем потоки у декодера (до -i) и энкодера, берём самый дешёвый пресет.
         "-threads",
         "1",
@@ -214,17 +243,7 @@ async def download_post_ytdlp(url: str, tmpdir: str) -> tuple[list[Path], str]:
     outtmpl = str(Path(tmpdir) / "%(title)s.%(ext)s")
     ydl_opts = {
         **BASE_YDL_OPTS,
-        # avc1 в приоритете как самый совместимый с телеграмом, но не единственный:
-        # Instagram отдаёт vp9, а его бот умеет перекодировать (CODECS_TO_REFORMAT)
-        "format": (
-            "bv*[ext=mp4][vcodec^=avc1][protocol^=http]+"
-            "ba[ext=m4a][protocol^=http]/"
-            "b[ext=mp4][vcodec^=avc1][protocol^=http]/"
-            "bv*[ext=mp4][protocol^=http]+"
-            "ba[ext=m4a][protocol^=http]/"
-            "b[ext=mp4][protocol^=http]/"
-            "bv*+ba/b"
-        ),
+        "format": INSTAGRAM_FORMAT if "instagram.com" in url else DEFAULT_FORMAT,
         "merge_output_format": "mp4",
         "outtmpl": outtmpl,
         "socket_timeout": 30,
