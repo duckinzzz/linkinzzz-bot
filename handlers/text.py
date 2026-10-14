@@ -3,7 +3,7 @@ import re
 from typing import Any, Dict, List
 
 from aiogram import F, Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import Message, BufferedInputFile, InputMediaPhoto, InputMediaVideo
 
 from core.config import ADMIN_ID
@@ -24,8 +24,13 @@ def _chunk(lst, n):
 
 
 async def _notify_admin(message: Message, note: str):
-    forwarded = await message.forward(chat_id=ADMIN_ID)
-    await forwarded.answer(note)
+    # уведомление админу — вспомогательное: если телеграм недоступен, оно не должно
+    # уносить с собой ни оригинальную ошибку, ни запись о ней в лог
+    try:
+        forwarded = await message.forward(chat_id=ADMIN_ID)
+        await forwarded.answer(note)
+    except TelegramAPIError as e:
+        log_event(event="admin_notify_failed", data=f"{note} | {type(e).__name__}: {e}")
 
 
 async def _make_progress(message: Message):
@@ -34,7 +39,7 @@ async def _make_progress(message: Message):
     async def progress_callback(step: str):
         try:
             await status.edit_text(text=step)
-        except TelegramBadRequest:
+        except TelegramAPIError:
             pass
 
     return status, progress_callback
@@ -193,39 +198,41 @@ async def text_private_handler(message: Message):
             await _deliver(message, url, "", progress_callback)
         try:
             await status.delete()
-        except TelegramBadRequest:
+        except TelegramAPIError:
             pass
 
         log_message(request_type="gallery-dl", message=message)
 
+    # запись в лог идёт первой в каждой ветке: статус и уведомление админу ходят
+    # в телеграм, и если он недоступен, раньше терялись и ошибка, и лог о ней
     except InappropriateContent as e:
+        log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
         await progress_callback("Это видео пока нельзя скачать, попробуйте позже.\n"
                                 "Разработчику отправлено уведомление об ошибке.")
         await _notify_admin(message, "стухли куки")
-        log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
 
     except NoMedia as e:
-        await progress_callback("В посте нет медиа 😥")
         log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
+        await progress_callback("В посте нет медиа 😥")
 
     except TooLarge as e:
-        await progress_callback("Слишком большой файл(ы) 😥")
         log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
+        await progress_callback("Слишком большой файл(ы) 😥")
 
     except UnsupportedSite as e:
+        log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
         await progress_callback("Ниасилил😥 Неподдерживаемый сайт")
         await _notify_admin(message, "пытались скачать")
-        log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
 
     except DownloadError as e:
+        log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
         await progress_callback("Ошибка загрузки 😥 Попробуйте позже")
         await _notify_admin(message, f"download error: {type(e).__name__}")
-        log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
 
     except Exception as e:
+        log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
         await progress_callback("Телеграм не пускает или произошла ошибка. Попробуйте снова")
         await _notify_admin(message, "пытались скачать (unknown error)")
-        log_error(request_type='gallery-dl', message=message, chat_id=chat_id, error=e)
 
     finally:
         if cache_key:
