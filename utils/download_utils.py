@@ -92,10 +92,28 @@ async def fix_video(input_path: str) -> str:
 
     ffmpeg = await asyncio.create_subprocess_exec(
         "ffmpeg",
+        "-y",
+        # прод-контейнер живёт с mem_limit 300m на хосте с 1 ГБ RAM: дефолтный пресет
+        # x264 и многопоточный vp9-декодер туда не влезают, ffmpeg убивает OOM-killer.
+        # Ограничиваем потоки у декодера (до -i) и энкодера, берём самый дешёвый пресет.
+        "-threads",
+        "1",
         "-i",
         str(input_path),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "28",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
         "-movflags",
         "+faststart",
+        "-threads",
+        "1",
         str(output_path),
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.PIPE,
