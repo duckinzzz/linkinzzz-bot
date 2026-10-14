@@ -196,11 +196,16 @@ async def download_post_ytdlp(url: str, tmpdir: str) -> tuple[list[Path], str]:
     outtmpl = str(Path(tmpdir) / "%(title)s.%(ext)s")
     ydl_opts = {
         **BASE_YDL_OPTS,
+        # avc1 в приоритете как самый совместимый с телеграмом, но не единственный:
+        # Instagram отдаёт vp9, а его бот умеет перекодировать (CODECS_TO_REFORMAT)
         "format": (
             "bv*[ext=mp4][vcodec^=avc1][protocol^=http]+"
             "ba[ext=m4a][protocol^=http]/"
             "b[ext=mp4][vcodec^=avc1][protocol^=http]/"
-            "18"
+            "bv*[ext=mp4][protocol^=http]+"
+            "ba[ext=m4a][protocol^=http]/"
+            "b[ext=mp4][protocol^=http]/"
+            "bv*+ba/b"
         ),
         "merge_output_format": "mp4",
         "outtmpl": outtmpl,
