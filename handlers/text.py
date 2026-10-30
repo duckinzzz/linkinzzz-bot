@@ -6,7 +6,7 @@ from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import Message, BufferedInputFile, InputMediaPhoto, InputMediaVideo
 
-from core.config import ADMIN_ID
+from core.config import ADMIN_ID, BOT_USERNAME
 from core.errors import DownloadError, InappropriateContent, NoMedia, UnsupportedSite, TooLarge
 from utils import cache
 from utils.download_utils import download_post_json
@@ -17,10 +17,51 @@ text_router = Router()
 MAX_MEDIA_GROUP = 10
 MAX_CAPTION = 1024
 
+GROUP_CHATS = ("group", "supergroup")
+
+URL_PATTERN = re.compile(r'^(https?://)?'
+                         r'(www\.)?'
+                         r'([a-zA-Z0-9-]+\.)+'
+                         r'([a-zA-Z]{2,})'
+                         r'(/\S*)?$')
+
 
 def _chunk(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
+
+
+def _is_group(message: Message) -> bool:
+    return message.chat.type in GROUP_CHATS
+
+
+def _extract_url(message: Message) -> str:
+    """Первая ссылка из текста: в чате может быть упоминание бота или пояснение рядом."""
+    for token in (message.text or "").split():
+        token = token.strip("<>()[]\"'")
+        if URL_PATTERN.match(token):
+            return token
+    return ""
+
+
+def _is_addressed_to_bot(message: Message) -> bool:
+    """В группах бот реагирует только на обращение: упоминание или реплай на его сообщение."""
+    username = (BOT_USERNAME or "").lower()
+    if message.reply_to_message and message.reply_to_message.from_user:
+        replied = message.reply_to_message.from_user
+        if replied.is_bot and (replied.username or "").lower() == username:
+            return True
+
+    text = (message.text or "").lower()
+    if username and f"@{username}" in text:
+        return True
+
+    for entity in message.entities or []:
+        if entity.type == "text_mention" and entity.user and entity.user.is_bot \
+                and entity.user.id == message.bot.id:
+            return True
+
+    return False
 
 
 async def _notify_admin(message: Message, note: str):
@@ -55,17 +96,23 @@ def _format_caption(caption: str) -> str:
 async def _dispatch_media(message: Message, media: List[Any], caption: str) -> List[Message]:
     """Отправляет готовый список InputMedia*, возвращая отправленные сообщения (в порядке медиа)."""
     sent: List[Message] = []
+    # в группах отдаём реплаем на сообщение со ссылкой, в личке — обычным сообщением
+    reply = _is_group(message)
+
     if len(media) == 1:
         m = media[0]
         if isinstance(m, InputMediaPhoto):
-            sent.append(await message.answer_photo(m.media, caption=caption or None))
+            send_photo = message.reply_photo if reply else message.answer_photo
+            sent.append(await send_photo(m.media, caption=caption or None))
         else:
-            sent.append(await message.answer_video(m.media, caption=caption or None,
-                                                   width=m.width, height=m.height))
+            send_video = message.reply_video if reply else message.answer_video
+            sent.append(await send_video(m.media, caption=caption or None,
+                                         width=m.width, height=m.height))
         return sent
 
+    send_group = message.reply_media_group if reply else message.answer_media_group
     for group in _chunk(media, MAX_MEDIA_GROUP):
-        sent.extend(await message.answer_media_group(group))
+        sent.extend(await send_group(group))
     return sent
 
 
@@ -170,20 +217,17 @@ async def _deliver(message: Message, url: str, cache_key: str, progress_callback
                   data=f"{cache_key} | sent={len(sent)} extracted={len(media)}")
 
 
-@text_router.message(F.content_type == "text", F.chat.type == "private")
-async def text_private_handler(message: Message):
+@text_router.message(F.content_type == "text")
+async def text_handler(message: Message):
     chat_id = message.chat.id
-    url = (message.text or "").strip()
 
-    pattern = re.compile(r'^(https?://)?'
-                         r'(www\.)?'
-                         r'([a-zA-Z0-9-]+\.)+'
-                         r'([a-zA-Z]{2,})'
-                         r'(/\S*)?$')
+    if _is_group(message) and not _is_addressed_to_bot(message):
+        return
 
-    if not pattern.match(url):
+    url = _extract_url(message)
+
+    if not url:
         await message.reply('Это не ссылка')
-        log_message(request_type='gallery-dl', message=message)
         return
 
     status, progress_callback = await _make_progress(message)
